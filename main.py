@@ -4,7 +4,6 @@ from google import genai
 from prompts import system_prompt
 from google.genai import types
 import argparse
-
 from call_function import available_functions, call_function
 
 def main():
@@ -16,49 +15,66 @@ def main():
     messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
 
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable not set")
-
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=messages,
-        config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt, temperature=0))
-    
-    if not response.usage_metadata:
-        raise RuntimeError("Gemini API response appears to be malformed")
-    
+
     if args.verbose:
-        print(f"User prompt:, {args.user_prompt}")
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+        print(f'User prompt: {args.user_prompt}\n')
+    
+    for _ in range(20):
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY environment variable not set")
 
-    print("Response:")
-    if response.function_calls is not None:
-       function_results = []
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=messages,
+            config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt, temperature=0))
+        
+        if not response.usage_metadata:
+            raise RuntimeError("Gemini API response appears to be malformed")
+        
+        if args.verbose:
+            print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
-       for function_call in response.function_calls:
-          function_call_result = call_function(function_call)
-          
-          if not function_call_result.parts:
-              raise RuntimeError('Function call result has no parts')
-          
-          part0 = function_call_result.parts[0]
-          if not part0.function_response:
-              raise RuntimeError('Function call result part has no function response')
+        print("Response:")
+        
+        if response.function_calls is not None:
+            function_results = []
 
-          func_response = part0.function_response
-          if not func_response.response:
-              raise RuntimeError('Function call result function_response has no resposne')
-          
-          function_results.append(part0)
+            for function_call in response.function_calls:
+                function_call_result = call_function(function_call)
+                
+                if not function_call_result.parts:
+                    raise RuntimeError('Function call result has no parts')
+                
+                part0 = function_call_result.parts[0]
+                if not part0.function_response:
+                    raise RuntimeError('Function call result part has no function response')
 
-          if args.verbose:
-              print(f'-> {func_response.response}')
+                func_response = part0.function_response
+                if not func_response.response:
+                    raise RuntimeError('Function call result function_response has no resposne')
+                
+                function_results.append(part0)
 
-          print(f"Calling function: {function_call_result}({function_call.args})") 
+                if args.verbose:
+                    print(f'-> {func_response.response}')
+
+                print(f"Calling function: {function_call_result}({function_call.args})")
+            
+            messages.append(types.Content(role="user", parts=function_results))
+
+        else:
+            print(response.text)
+            break
+
+        if response.candidates:
+            for candidate in response.candidates:
+                messages.append(candidate.content) # type: ignore
+        
     else:
-        print(response.text)
+        print('Max iterations reached.')
+        exit(code=1)
 
 if __name__ == "__main__":
     main()
