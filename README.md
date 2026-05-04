@@ -1,7 +1,7 @@
 # AI Coding Agent 🤖
 An autonomous coding assistant that leverages the Gemini API to interact directly with your local file system.
 
-# ✨ Features
+✨ Features
 The agent interprets natural language prompts to perform complex file operations within a controlled sandbox:
 
 File Discovery: List files and directories.
